@@ -10,7 +10,7 @@ from models.user import db
 from routes.user import user_bp
 from routes.opme import opme_bp
 from routes.maino import maino_bp
-app = Flask(__name__, static_folder=\'static\')
+app = Flask(__name__, static_folder='static')
 CORS(app, resources={r\"/api/*\": {\"origins\": \"*\"}})
 app.config["SECRET_KEY"] = "asdf#FGSgvasgf$5$WGT"
 
