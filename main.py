@@ -11,7 +11,7 @@ from routes.user import user_bp
 from routes.opme import opme_bp
 from routes.maino import maino_bp
 app = Flask(__name__, static_folder='static')
-CORS(app, resources={r"/api/*": {"origins": "opme-control-frontend-production.up.railway.app"}})
+CORS(app, resources={r"/api/*": {"origins": ["https:opme-control-frontend-production.up.railway.app", "https://opme-control-backend-fixed-v17-production.up.railway.app"]}})
 app.config["SECRET_KEY"] = "asdf#FGSgvasgf$5$WGT"
 
 app.register_blueprint(user_bp, url_prefix='/api')
