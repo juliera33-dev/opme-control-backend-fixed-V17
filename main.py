@@ -1,9 +1,6 @@
 import os
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
-# REMOVIDO: from dotenv import load_dotenv
-
-# REMOVIDO: load_dotenv()
 
 # Imports dos módulos da aplicação
 from models.user import db
@@ -20,6 +17,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.config["SECRET_KEY"] = "asdf#FGSgvasgf$5$WGT"
 
 # Registro dos blueprints (onde as rotas da API são adicionadas ao app)
+# ESTE BLOCO DEVE VIR ANTES DA ROTA serve(path)
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(opme_bp, url_prefix='/api')
 app.register_blueprint(maino_bp, url_prefix='/api')
@@ -30,6 +28,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 # Rota "pega-tudo" para servir o frontend React
+# ESSA ROTA DEVE SER A ÚLTIMA A SER VERIFICADA PELO FLASK
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
@@ -37,8 +36,11 @@ def serve(path):
     if static_folder_path is None:
         return "Static folder not configured", 404
 
+    # Primeiro, verifica se o caminho corresponde a um arquivo estático (CSS, JS, imagem)
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
+    
+    # Se não for um arquivo estático e não for uma rota de API, retorna o index.html
     else:
         return send_from_directory(static_folder_path, 'index.html')
 
