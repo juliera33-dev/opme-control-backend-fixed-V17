@@ -5,8 +5,8 @@ import tempfile
 import zipfile
 import os
 import logging
+# REMOVIDO: from insert_nfe_data import insert_nfe_data
 from models.opme import NotaFiscal, ItemNotaFiscal, db
-from insert_nfe_data import insert_nfe_data 
 
 # Configuração de logging para diagnóstico no backend
 logging.basicConfig(level=logging.INFO)
