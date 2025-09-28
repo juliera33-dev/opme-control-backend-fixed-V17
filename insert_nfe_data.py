@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
-from models.opme import NotaFiscal, ItemNotaFiscal, db
+from app.models.opme import NotaFiscal, ItemNotaFiscal, db # Importação corrigida
 from flask import current_app
+from datetime import datetime
 
 def insert_nfe_data(xml_file_path):
     """
@@ -24,11 +25,13 @@ def insert_nfe_data(xml_file_path):
 
             chave_acesso = inf_nfe_element.attrib['Id'].replace('NFe', '')
             numero_nfe = identificacao_element.find('nfe:nNF', ns).text
-            data_emissao = identificacao_element.find('nfe:dhEmi', ns).text
+            # Assumindo que o dhEmi está no formato ISO 8601
+            data_emissao = identificacao_element.find('nfe:dhEmi', ns).text 
             
             # Verificação de duplicidade da nota fiscal
             existing_nfe = NotaFiscal.query.filter_by(chave_acesso=chave_acesso).first()
             if existing_nfe:
+                # O erro de upload deve ser tratado na rota, mas este é o retorno da função
                 return {'success': False, 'message': f'Nota fiscal {numero_nfe} (Chave {chave_acesso}) já existe no banco de dados.'}
 
             # Criar novo objeto NotaFiscal
@@ -63,4 +66,5 @@ def insert_nfe_data(xml_file_path):
 
     except Exception as e:
         db.session.rollback()
+        # Não levanta exceção diretamente, apenas para a rota tratar
         raise Exception(f'Erro ao processar o arquivo XML: {str(e)}')
