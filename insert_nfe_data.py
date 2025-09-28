@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from app.models.opme import NotaFiscal, ItemNotaFiscal, db # Importação corrigida
+from models.opme import NotaFiscal, ItemNotaFiscal, db # Importação corrigida
 from flask import current_app
 from datetime import datetime
 
