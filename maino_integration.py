@@ -4,89 +4,80 @@ from datetime import datetime
 import tempfile
 import zipfile
 import os
-from insert_nfe_data import insert_nfe_data
 import logging
+from models.opme import NotaFiscal, ItemNotaFiscal, db
+from insert_nfe_data import insert_nfe_data 
 
 # Configuração de logging para diagnóstico no backend
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MainoAPI:
-    def __init__(self, api_key=None, bearer_token=None):
-        # Corrigido para a URL base oficial da API
+    _access_token = None 
+
+    def __init__(self, api_key=None, email=None, password=None):
         self.base_url = "https://api.maino.com.br"
         self.api_key = api_key
-        self.bearer_token = bearer_token
+        self.email = email
+        self.password = password
         
-    def _get_headers(self):
-        """Retorna os headers para autenticação"""
+    def _authenticate(self):
+        """Faz a requisição para obter o access_token."""
+        endpoint = f"{self.base_url}/api/v2/authentication"
         headers = {"Content-Type": "application/json"}
         
-        if self.bearer_token:
-            headers["Authorization"] = f"Bearer {self.bearer_token}"
-        elif self.api_key:
-            # Maino usa X-Api-Key para a chave de webservices
-            headers["X-Api-Key"] = self.api_key
+        payload = {
+            "application_uid": self.api_key,
+            "email": self.email,
+            "password": self.password
+        }
+        
+        logger.info("Tentando autenticar na API do Maino...")
+        
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload, timeout=10, verify=False)
+            response.raise_for_status()
+            
+            result = response.json()
+            token = result.get('access_token')
+            
+            if token:
+                MainoAPI._access_token = token
+                logger.info("Autenticação bem-sucedida! Token obtido.")
+                return True
+            else:
+                logger.error("Autenticação falhou: Token não encontrado na resposta.")
+                return False
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erro de rede ou HTTP durante a autenticação: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Erro inesperado durante a autenticação: {e}")
+            return False
+
+    def _get_headers(self):
+        """Retorna os headers para requisições autenticadas."""
+        headers = {"Content-Type": "application/json"}
+        
+        if not MainoAPI._access_token:
+            if not self._authenticate():
+                raise Exception("Falha na autenticação. Verifique application_uid, email e password.")
+
+        headers["Authorization"] = f"Bearer {MainoAPI._access_token}"
         
         return headers
     
     def test_connection(self):
         """
         Teste a conexão e autenticação com a API do Mainô fazendo uma requisição simples.
-        
-        Retorna:
-            dict: {status: 'ok'} ou um erro.
         """
-        # Endpoint de teste completo (usando a rota fornecida pelo time de dev)
-        endpoint = f"{self.base_url}/api/v2/notas_fiscais_emitidas"
-        
-        hoje = datetime.now().strftime("%d/%m/%Y")
-        params = {
-            "data_inicio": hoje,
-            "data_fim": hoje,
-            "numero_nfe": "999999999"
-        }
-        
         try:
-            # Adicionado logging para mostrar a URL e os headers enviados no console do backend
-            headers = self._get_headers()
-            logger.info(f"Tentando conectar a: {endpoint}")
-            logger.info(f"Headers (chave oculta): X-Api-Key={self.api_key[:4]}...{self.api_key[-4:]}")
-
-            # Desabilitando a verificação de SSL (verify=False) e adicionando timeout
-            response = requests.get(endpoint, headers=headers, params=params, timeout=10, verify=False) 
-            
-            logger.info(f"Status da resposta da Maino: {response.status_code}")
-            
-            # Se recebermos um HTML (que causa o SyntaxError no front), logamos o conteúdo no backend
-            if '<!DOCTYPE' in response.text.upper():
-                 logger.error(f"Erro: Maino retornou HTML de erro! Conteúdo parcial: {response.text[:200]}")
-                 return {"status": "error", "message": "Erro no retorno da API (HTML em vez de JSON). Verifique a chave ou o acesso ao endpoint.", "code": 500}
-
-            # 200 OK: Conexão bem-sucedida.
-            if response.status_code == 200:
-                return {"status": "ok", "code": 200}
-            
-            # 401 Unauthorized / 403 Forbidden: Falha na autenticação (Chave errada).
-            elif response.status_code in [401, 403]:
-                return {"status": "error", "message": "Credenciais inválidas.", "code": response.status_code}
-            
-            # Outros erros HTTP (400, 500, etc.)
-            else:
-                try:
-                    error_json = response.json()
-                    error_message = error_json.get("error", f"Erro desconhecido na API do Mainô: Status {response.status_code}")
-                except json.JSONDecodeError:
-                    error_message = f"Status {response.status_code}. Resposta não JSON (provavelmente HTML de erro)."
-                
-                return {"status": "error", "message": error_message, "code": response.status_code}
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro de rede/conexão: {e}")
-            return {"status": "error", "message": f"Erro de rede ao conectar ao Mainô: {e}", "code": 503}
+            self._get_headers() 
+            return {"status": "ok", "code": 200, "message": "Conexão e autenticação bem-sucedidas!"}
         except Exception as e:
-            logger.error(f"Erro inesperado: {e}")
-            return {"status": "error", "message": f"Erro inesperado: {e}", "code": 500}
+            logger.error(f"Erro no teste de conexão: {e}")
+            return {"status": "error", "message": str(e), "code": 401}
             
     def listar_notas_fiscais_emitidas(self, data_inicio, data_fim, numero_nfe=None, cnpj_destinatario=None, exibir_xmls=False):
         """Lista notas fiscais emitidas"""
@@ -108,13 +99,13 @@ class MainoAPI:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
-            print(f"Erro HTTP ao listar notas fiscais: {e}")
+            logger.error(f"Erro HTTP ao listar notas fiscais: {e}")
             return {"error": f"Erro na API do Mainô: {response.status_code}. {e}"}
         except requests.exceptions.RequestException as e:
-            print(f"Erro de rede/conexão: {e}")
+            logger.error(f"Erro de rede/conexão: {e}")
             return {"error": f"Erro de rede ao conectar à API do Mainô: {e}"}
         except Exception as e:
-            print(f"Erro inesperado: {e}")
+            logger.error(f"Erro inesperado: {e}")
             return {"error": f"Erro inesperado: {e}"}
 
     def exportar_xmls_nfes_emitidas(self, data_inicio, data_fim):
@@ -132,7 +123,7 @@ class MainoAPI:
             result = response.json()
             return result.get("zip_url")
         except requests.exceptions.RequestException as e:
-            print(f"Erro ao exportar XMLs: {e}")
+            logger.error(f"Erro ao exportar XMLs: {e}")
             return None
     
     def baixar_e_processar_xmls(self, data_inicio, data_fim, db_path="database/app.db"):
