@@ -5,10 +5,16 @@ import tempfile
 import zipfile
 import os
 from insert_nfe_data import insert_nfe_data
+import logging
+
+# Configuração de logging para diagnóstico no backend
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class MainoAPI:
     def __init__(self, api_key=None, bearer_token=None):
-        self.base_url = "https://api.maino.com.br/api/v2"
+        # Corrigido para a URL base oficial da API
+        self.base_url = "https://api.maino.com.br"
         self.api_key = api_key
         self.bearer_token = bearer_token
         
@@ -19,25 +25,72 @@ class MainoAPI:
         if self.bearer_token:
             headers["Authorization"] = f"Bearer {self.bearer_token}"
         elif self.api_key:
+            # Maino usa X-Api-Key para a chave de webservices
             headers["X-Api-Key"] = self.api_key
         
         return headers
     
+    def test_connection(self):
+        """
+        Teste a conexão e autenticação com a API do Mainô fazendo uma requisição simples.
+        
+        Retorna:
+            dict: {status: 'ok'} ou um erro.
+        """
+        # Endpoint de teste completo (usando a rota fornecida pelo time de dev)
+        endpoint = f"{self.base_url}/api/v2/notas_fiscais_emitidas"
+        
+        hoje = datetime.now().strftime("%d/%m/%Y")
+        params = {
+            "data_inicio": hoje,
+            "data_fim": hoje,
+            "numero_nfe": "999999999"
+        }
+        
+        try:
+            # Adicionado logging para mostrar a URL e os headers enviados no console do backend
+            headers = self._get_headers()
+            logger.info(f"Tentando conectar a: {endpoint}")
+            logger.info(f"Headers (chave oculta): X-Api-Key={self.api_key[:4]}...{self.api_key[-4:]}")
+
+            # Desabilitando a verificação de SSL (verify=False) e adicionando timeout
+            response = requests.get(endpoint, headers=headers, params=params, timeout=10, verify=False) 
+            
+            logger.info(f"Status da resposta da Maino: {response.status_code}")
+            
+            # Se recebermos um HTML (que causa o SyntaxError no front), logamos o conteúdo no backend
+            if '<!DOCTYPE' in response.text.upper():
+                 logger.error(f"Erro: Maino retornou HTML de erro! Conteúdo parcial: {response.text[:200]}")
+                 return {"status": "error", "message": "Erro no retorno da API (HTML em vez de JSON). Verifique a chave ou o acesso ao endpoint.", "code": 500}
+
+            # 200 OK: Conexão bem-sucedida.
+            if response.status_code == 200:
+                return {"status": "ok", "code": 200}
+            
+            # 401 Unauthorized / 403 Forbidden: Falha na autenticação (Chave errada).
+            elif response.status_code in [401, 403]:
+                return {"status": "error", "message": "Credenciais inválidas.", "code": response.status_code}
+            
+            # Outros erros HTTP (400, 500, etc.)
+            else:
+                try:
+                    error_json = response.json()
+                    error_message = error_json.get("error", f"Erro desconhecido na API do Mainô: Status {response.status_code}")
+                except json.JSONDecodeError:
+                    error_message = f"Status {response.status_code}. Resposta não JSON (provavelmente HTML de erro)."
+                
+                return {"status": "error", "message": error_message, "code": response.status_code}
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erro de rede/conexão: {e}")
+            return {"status": "error", "message": f"Erro de rede ao conectar ao Mainô: {e}", "code": 503}
+        except Exception as e:
+            logger.error(f"Erro inesperado: {e}")
+            return {"status": "error", "message": f"Erro inesperado: {e}", "code": 500}
+            
     def listar_notas_fiscais_emitidas(self, data_inicio, data_fim, numero_nfe=None, cnpj_destinatario=None, exibir_xmls=False):
-        """
-        Lista notas fiscais emitidas
-        
-        Args:
-            data_inicio (str): Data de início no formato DD/MM/AAAA
-            data_fim (str): Data de fim no formato DD/MM/AAAA
-            numero_nfe (str, optional): Número da NF-e para filtrar
-            cnpj_destinatario (str, optional): CNPJ do destinatário para filtrar
-            exibir_xmls (bool): Se deve incluir XMLs na resposta
-        
-        Returns:
-            dict: Resposta da API com as notas fiscais
-        """
-        endpoint = f"{self.base_url}/notas_fiscais_emitidas"
+        """Lista notas fiscais emitidas"""
+        endpoint = f"{self.base_url}/api/v2/notas_fiscais_emitidas"
         
         params = {
             "data_inicio": data_inicio,
@@ -51,25 +104,22 @@ class MainoAPI:
             params["cnpj_destinatario"] = cnpj_destinatario
         
         try:
-            response = requests.get(endpoint, headers=self._get_headers(), params=params)
+            response = requests.get(endpoint, headers=self._get_headers(), params=params, verify=False)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            print(f"Erro HTTP ao listar notas fiscais: {e}")
+            return {"error": f"Erro na API do Mainô: {response.status_code}. {e}"}
         except requests.exceptions.RequestException as e:
-            print(f"Erro ao listar notas fiscais: {e}")
-            return None
-    
+            print(f"Erro de rede/conexão: {e}")
+            return {"error": f"Erro de rede ao conectar à API do Mainô: {e}"}
+        except Exception as e:
+            print(f"Erro inesperado: {e}")
+            return {"error": f"Erro inesperado: {e}"}
+
     def exportar_xmls_nfes_emitidas(self, data_inicio, data_fim):
-        """
-        Exporta XMLs das NF-es emitidas em um período
-        
-        Args:
-            data_inicio (str): Data de início no formato DD/MM/AAAA
-            data_fim (str): Data de fim no formato DD/MM/AAAA
-        
-        Returns:
-            str: URL do arquivo ZIP com os XMLs ou None em caso de erro
-        """
-        endpoint = f"{self.base_url}/nfes_emitidas"
+        """Exporta XMLs das NF-es emitidas em um período"""
+        endpoint = f"{self.base_url}/api/v2/nfes_emitidas"
         
         params = {
             "data_inicio": data_inicio,
@@ -77,7 +127,7 @@ class MainoAPI:
         }
         
         try:
-            response = requests.get(endpoint, headers=self._get_headers(), params=params)
+            response = requests.get(endpoint, headers=self._get_headers(), params=params, verify=False)
             response.raise_for_status()
             result = response.json()
             return result.get("zip_url")
@@ -97,42 +147,35 @@ class MainoAPI:
         Returns:
             dict: Resultado do processamento
         """
-        # Exportar XMLs
         zip_url = self.exportar_xmls_nfes_emitidas(data_inicio, data_fim)
         
         if not zip_url:
             return {"success": False, "message": "Erro ao obter URL do ZIP"}
         
         try:
-            # Baixar o arquivo ZIP
-            zip_response = requests.get(zip_url)
+            zip_response = requests.get(zip_url, verify=False)
             zip_response.raise_for_status()
             
-            # Salvar temporariamente
             with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
                 temp_zip.write(zip_response.content)
                 temp_zip_path = temp_zip.name
             
-            # Extrair e processar XMLs
             processed_count = 0
             errors = []
             
             with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
-                # Criar diretório temporário para extração
                 with tempfile.TemporaryDirectory() as temp_dir:
                     zip_ref.extractall(temp_dir)
                     
-                    # Processar cada arquivo XML
                     for filename in os.listdir(temp_dir):
                         if filename.lower().endswith('.xml'):
                             xml_path = os.path.join(temp_dir, filename)
                             try:
-                                insert_nfe_data(xml_path, db_path)
+                                insert_nfe_data(xml_path)
                                 processed_count += 1
                             except Exception as e:
                                 errors.append(f"Erro ao processar {filename}: {str(e)}")
             
-            # Limpar arquivo ZIP temporário
             os.unlink(temp_zip_path)
             
             return {
@@ -144,32 +187,3 @@ class MainoAPI:
             
         except Exception as e:
             return {"success": False, "message": f"Erro ao processar XMLs: {str(e)}"}
-
-# Exemplo de uso
-def exemplo_uso():
-    """Exemplo de como usar a integração com o Mainô"""
-    
-    # Inicializar com chave de API (método recomendado)
-    api = MainoAPI(api_key="sua_chave_api_aqui")
-    
-    # Ou inicializar com Bearer Token
-    # api = MainoAPI(bearer_token="seu_bearer_token_aqui")
-    
-    # Listar notas fiscais de um período
-    data_inicio = "01/01/2025"
-    data_fim = "31/01/2025"
-    
-    notas = api.listar_notas_fiscais_emitidas(data_inicio, data_fim)
-    if notas:
-        print(f"Encontradas {len(notas.get('notas_fiscais', []))} notas fiscais")
-    
-    # Baixar e processar XMLs automaticamente
-    resultado = api.baixar_e_processar_xmls(data_inicio, data_fim)
-    if resultado["success"]:
-        print(resultado["message"])
-    else:
-        print(f"Erro: {resultado['message']}")
-
-if __name__ == "__main__":
-    exemplo_uso()
-

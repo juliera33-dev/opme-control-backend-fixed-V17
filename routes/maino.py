@@ -1,8 +1,28 @@
 from flask import Blueprint, request, jsonify
 import os
 from maino_integration import MainoAPI
+from models.user import db # Importando o objeto db para usar o banco de dados do main.py
 
 maino_bp = Blueprint('maino', __name__)
+
+# Rota adicionada para testar a conexão com o Maino
+@maino_bp.route('/test-maino', methods=['GET'])
+def test_maino():
+    """Teste a conexão com a API do Mainô."""
+    try:
+        api_key = os.getenv('MAINO_API_KEY')
+        if not api_key:
+            return jsonify({'success': False, 'error': 'Variável de ambiente MAINO_API_KEY não configurada'}), 500
+
+        maino_api = MainoAPI(api_key=api_key)
+        response = maino_api.test_connection() # Assumindo que a classe MainoAPI tem um método de teste
+        
+        if response and response.get('status') == 'ok':
+            return jsonify({'success': True, 'message': 'Conexão estabelecida com sucesso!'}), 200
+        else:
+            return jsonify({'success': False, 'error': 'Falha na conexão. Verifique as credenciais.'}), 401
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Erro na conexão: {str(e)}'}), 500
 
 @maino_bp.route('/sync_maino', methods=['POST'])
 def sync_maino():
@@ -14,26 +34,21 @@ def sync_maino():
         if not data or 'data_inicio' not in data or 'data_fim' not in data:
             return jsonify({'error': 'data_inicio e data_fim são obrigatórios'}), 400
         
-        api_key = data.get('api_key')
-        bearer_token = data.get('bearer_token')
-        
-        if not api_key and not bearer_token:
-            return jsonify({'error': 'api_key ou bearer_token é obrigatório'}), 400
+        # Corrigido: Pegando a chave da variável de ambiente, não do frontend
+        api_key = os.getenv('MAINO_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'Variável de ambiente MAINO_API_KEY não configurada'}), 500
         
         # Inicializar API do Mainô
-        if api_key:
-            maino_api = MainoAPI(api_key=api_key)
-        else:
-            maino_api = MainoAPI(bearer_token=bearer_token)
+        maino_api = MainoAPI(api_key=api_key)
         
-        # Caminho do banco de dados
-        db_path = os.path.join(os.path.dirname(__file__), '..', 'database', 'app.db')
+        # Corrigido: Usando o banco de dados Postgres do main.py
+        # O caminho do banco de dados agora será gerenciado pelo SQLAlchemy
         
         # Baixar e processar XMLs
         resultado = maino_api.baixar_e_processar_xmls(
             data['data_inicio'],
-            data['data_fim'],
-            db_path
+            data['data_fim']
         )
         
         if resultado['success']:
@@ -58,17 +73,13 @@ def list_nfes_maino():
         if not data or 'data_inicio' not in data or 'data_fim' not in data:
             return jsonify({'error': 'data_inicio e data_fim são obrigatórios'}), 400
         
-        api_key = data.get('api_key')
-        bearer_token = data.get('bearer_token')
-        
-        if not api_key and not bearer_token:
-            return jsonify({'error': 'api_key ou bearer_token é obrigatório'}), 400
+        # Corrigido: Pegando a chave da variável de ambiente
+        api_key = os.getenv('MAINO_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'Variável de ambiente MAINO_API_KEY não configurada'}), 500
         
         # Inicializar API do Mainô
-        if api_key:
-            maino_api = MainoAPI(api_key=api_key)
-        else:
-            maino_api = MainoAPI(bearer_token=bearer_token)
+        maino_api = MainoAPI(api_key=api_key)
         
         # Listar notas fiscais
         notas = maino_api.listar_notas_fiscais_emitidas(
@@ -86,4 +97,3 @@ def list_nfes_maino():
             
     except Exception as e:
         return jsonify({'error': f'Erro ao listar NF-es: {str(e)}'}), 500
-
