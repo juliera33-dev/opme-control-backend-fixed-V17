@@ -1,10 +1,9 @@
 import os
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
+# REMOVIDO: from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente do arquivo .env
-load_dotenv()
+# REMOVIDO: load_dotenv()
 
 # Imports dos módulos da aplicação
 from models.user import db
@@ -14,8 +13,8 @@ from routes.maino import maino_bp
 
 app = Flask(__name__, static_folder='static')
 
-# Configuração do CORS
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "https://opme-control-frontend-production.up.railway.app", "https://opme-control-backend-fixed-v17-production.up.railway.app"]}})
+# Configuração do CORS: Usando o curinga "*" para resolver o problema de "Failed to Fetch" no deploy
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Configuração da chave secreta
 app.config["SECRET_KEY"] = "asdf#FGSgvasgf$5$WGT"
@@ -49,14 +48,6 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     
-    # ---- INÍCIO DO BLOCO DE DEBUGGING DE ROTAS ----
-    # Este código vai imprimir no terminal todas as rotas que o Flask conhece
-    print("\n--- ROTAS REGISTRADAS NA APLICAÇÃO ---")
-    for rule in app.url_map.iter_rules():
-        print(f"Endpoint: {rule.endpoint}, Rota: {rule.rule}")
-    print("--- FIM DAS ROTAS ---\n")
-    # ---- FIM DO BLOCO DE DEBUGGING ----
-
     # Define a porta e inicia o servidor
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
