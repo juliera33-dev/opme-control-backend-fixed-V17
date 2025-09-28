@@ -1,65 +1,66 @@
-import sqlite3
-from parse_nfe_xml import parse_nfe_xml
+import xml.etree.ElementTree as ET
+from models.opme import NotaFiscal, ItemNotaFiscal, db
+from flask import current_app
 
-def insert_nfe_data(xml_content, db_name="opme_control.db", is_file=True):
-    if is_file:
-        nfe_data = parse_nfe_xml(xml_content)
-    else:
-        # Se não for um arquivo, assume que xml_content é o próprio conteúdo XML
-        nfe_data = parse_nfe_xml(xml_content, is_file=False)
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
+def insert_nfe_data(xml_file_path):
+    """
+    Insere dados de um arquivo XML de NF-e no banco de dados.
+    """
+    try:
+        # Pega a referência para o app Flask
+        app = current_app._get_current_object()
 
-    # Inserir cabeçalho da NF-e
-    cursor.execute("""
-        INSERT INTO nfe_header (nNF, dEmi, CNPJ_emit, xNome_emit, CNPJ_dest, xNome_dest)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        nfe_data["nNF"],
-        nfe_data["dEmi"],
-        nfe_data["CNPJ_emit"],
-        nfe_data["xNome_emit"],
-        nfe_data["CNPJ_dest"],
-        nfe_data["xNome_dest"]
-    ))
-    nfe_id = cursor.lastrowid
+        with app.app_context():
+            # Parse do arquivo XML
+            tree = ET.parse(xml_file_path)
+            root = tree.getroot()
 
-    # Inserir itens da NF-e e informações de lote
-    for product in nfe_data["products"]:
-        cursor.execute("""
-            INSERT INTO nfe_item (nfe_id, cProd, xProd, CFOP, qCom, vUnCom, vProd)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            nfe_id,
-            product["cProd"],
-            product["xProd"],
-            product["CFOP"],
-            product["qCom"],
-            product["vUnCom"],
-            product["vProd"]
-        ))
-        nfe_item_id = cursor.lastrowid
+            # Namespaces para buscar os elementos
+            ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
+            
+            # Extrair dados da NF-e
+            inf_nfe_element = root.find('.//nfe:infNFe', ns)
+            identificacao_element = root.find('.//nfe:ide', ns)
 
-        lote_info = product["lote_info"]
-        if lote_info["nLote"]:
-            cursor.execute("""
-                INSERT INTO lote_info (nfe_item_id, nLote, qLote, dFab, dVal)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                nfe_item_id,
-                lote_info["nLote"],
-                lote_info["qLote"],
-                lote_info["dFab"],
-                lote_info["dVal"]
-            ))
+            chave_acesso = inf_nfe_element.attrib['Id'].replace('NFe', '')
+            numero_nfe = identificacao_element.find('nfe:nNF', ns).text
+            data_emissao = identificacao_element.find('nfe:dhEmi', ns).text
+            
+            # Verificação de duplicidade da nota fiscal
+            existing_nfe = NotaFiscal.query.filter_by(chave_acesso=chave_acesso).first()
+            if existing_nfe:
+                return {'success': False, 'message': f'Nota fiscal {numero_nfe} (Chave {chave_acesso}) já existe no banco de dados.'}
 
-    conn.commit()
-    conn.close()
+            # Criar novo objeto NotaFiscal
+            nova_nfe = NotaFiscal(
+                chave_acesso=chave_acesso,
+                numero=numero_nfe,
+                data_emissao=datetime.fromisoformat(data_emissao).replace(tzinfo=None)
+            )
+            
+            db.session.add(nova_nfe)
+            
+            # Extrair dados dos itens
+            det_elements = root.findall('.//nfe:det', ns)
+            for det_element in det_elements:
+                prod_element = det_element.find('nfe:prod', ns)
+                codigo_produto = prod_element.find('nfe:cProd', ns).text
+                descricao_produto = prod_element.find('nfe:xProd', ns).text
+                quantidade = float(prod_element.find('nfe:qCom', ns).text)
+                valor_total_item = float(prod_element.find('nfe:vProd', ns).text)
 
-if __name__ == '__main__':
-    # Exemplo de uso
-    # insert_nfe_data("nfe_exemplo.xml")
-    # print("Dados da NF-e inseridos no banco de dados com sucesso.")
-    pass
+                novo_item = ItemNotaFiscal(
+                    codigo_produto=codigo_produto,
+                    descricao_produto=descricao_produto,
+                    quantidade=quantidade,
+                    valor_total=valor_total_item,
+                    nota_fiscal=nova_nfe
+                )
+                db.session.add(novo_item)
 
+            db.session.commit()
+            return {'success': True, 'message': f'Nota fiscal {numero_nfe} e seus itens inseridos com sucesso!'}
 
+    except Exception as e:
+        db.session.rollback()
+        raise Exception(f'Erro ao processar o arquivo XML: {str(e)}')
