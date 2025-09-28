@@ -5,8 +5,8 @@ import tempfile
 import zipfile
 import os
 import logging
-# REMOVIDO: from insert_nfe_data import insert_nfe_data
-from models.opme import NotaFiscal, ItemNotaFiscal, db
+from insert_nfe_data import insert_nfe_data
+from models.opme import NotaFiscal, ItemNotaFiscal, db # Importação corrigida
 
 # Configuração de logging para diagnóstico no backend
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +16,7 @@ class MainoAPI:
     _access_token = None 
 
     def __init__(self, api_key=None, email=None, password=None):
+        # Corrigido para a URL base oficial da API
         self.base_url = "https://api.maino.com.br"
         self.api_key = api_key
         self.email = email
@@ -129,11 +130,6 @@ class MainoAPI:
     def baixar_e_processar_xmls(self, data_inicio, data_fim, db_path="database/app.db"):
         """
         Baixa XMLs do Mainô e processa automaticamente
-        
-        Args:
-            data_inicio (str): Data de início no formato DD/MM/AAAA
-            data_fim (str): Data de fim no formato DD/MM/AAAA
-            db_path (str): Caminho para o banco de dados
         
         Returns:
             dict: Resultado do processamento
