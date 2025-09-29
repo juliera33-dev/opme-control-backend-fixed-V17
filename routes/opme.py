@@ -2,18 +2,16 @@ from flask import Blueprint, request, jsonify
 from sqlalchemy import func
 import os
 
-# Importa a instância do DB e os modelos do banco de dados
-from models.user import db, Movimento, NFe, Produto, Cliente 
+# CORREÇÃO: Trocado 'NFe' por 'NotaFiscal' para corresponder ao models/user.py
+from models.user import db, Movimento, NotaFiscal, Produto, Cliente 
 
 opme_bp = Blueprint('opme', __name__)
 
 # --- OBSERVAÇÃO ---
 # Esta rota de upload ainda usa a lógica antiga de salvar em um arquivo local (app.db).
 # Ela precisará ser reescrita no futuro para salvar os dados no PostgreSQL usando o SQLAlchemy.
-# Por enquanto, a deixaremos como está para não quebrar a funcionalidade de upload.
 @opme_bp.route('/notas-fiscais/upload-xml', methods=['POST'])
 def upload_xml():
-    # ... (código original do upload_xml) ...
     # Este código precisa ser refatorado para usar db.session.add() e db.session.commit()
     # em vez de insert_nfe_data com db_path.
     return jsonify({'error': 'Função de upload ainda não refatorada para PostgreSQL.'}), 501
@@ -26,8 +24,6 @@ def get_balance():
         cnpj_cliente = request.args.get('cnpj_cliente')
 
         # A consulta agora é feita usando SQLAlchemy (db.session)
-        # Este é um exemplo de como calcular o saldo diretamente no banco de dados.
-        # Ele agrupa por cliente, produto e lote e soma as quantidades.
         query = db.session.query(
             Movimento.cnpj_dest,
             Movimento.xNome_dest,
