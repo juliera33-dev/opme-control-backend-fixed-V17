@@ -18,28 +18,42 @@ class User(db.Model):
             'email': self.email
         }
 
-# --- MODELOS FALTANTES ADICIONADOS ABAIXO ---
+# --- MODELOS CORRIGIDOS E ADICIONADOS ABAIXO ---
 
-class NFe(db.Model):
-    __tablename__ = 'nfe'
+# CLASSE RENOMEADA DE NFe PARA NotaFiscal
+class NotaFiscal(db.Model):
+    __tablename__ = 'nota_fiscal' # Trocado para nome mais padrão
     id = db.Column(db.Integer, primary_key=True)
-    nNF = db.Column(db.String, unique=True, nullable=False)
-    dEmi = db.Column(DateTime, nullable=False)
-    # Adicione outras colunas da NFe conforme necessário
+    chave_acesso = db.Column(db.String(44), unique=True, nullable=False)
+    numero = db.Column(db.String(9), nullable=False)
+    data_emissao = db.Column(DateTime, nullable=False)
+    
+    # Relação com os itens
+    itens = db.relationship('ItemNotaFiscal', backref='nota_fiscal', lazy=True)
+
+# NOVA CLASSE ADICIONADA
+class ItemNotaFiscal(db.Model):
+    __tablename__ = 'item_nota_fiscal'
+    id = db.Column(db.Integer, primary_key=True)
+    codigo_produto = db.Column(db.String, nullable=False)
+    descricao_produto = db.Column(db.String, nullable=False)
+    quantidade = db.Column(db.Float, nullable=False)
+    valor_total = db.Column(db.Float, nullable=False)
+    
+    # Chave estrangeira para ligar o item à sua nota fiscal
+    nota_fiscal_id = db.Column(db.Integer, db.ForeignKey('nota_fiscal.id'), nullable=False)
 
 class Produto(db.Model):
     __tablename__ = 'produto'
     id = db.Column(db.Integer, primary_key=True)
     cProd = db.Column(db.String, unique=True, nullable=False)
     xProd = db.Column(db.String, nullable=False)
-    # Adicione outras colunas do Produto conforme necessário
 
 class Cliente(db.Model):
     __tablename__ = 'cliente'
     id = db.Column(db.Integer, primary_key=True)
     cnpj_dest = db.Column(db.String, unique=True, nullable=False)
     xNome_dest = db.Column(db.String, nullable=False)
-    # Adicione outras colunas do Cliente conforme necessário
 
 class Movimento(db.Model):
     __tablename__ = 'movimento'
