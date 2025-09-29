@@ -1,12 +1,11 @@
 from flask import Blueprint, request, jsonify
 import os
 from maino_integration import MainoAPI
-# CORREÇÃO: A importação agora aponta para 'models.user'
+# CORREÇÃO: A importação agora aponta para 'models.user' e usa os nomes corretos
 from models.user import NotaFiscal, ItemNotaFiscal, db 
 
 maino_bp = Blueprint('maino', __name__)
 
-# Rota adicionada para testar a conexão com o Maino
 @maino_bp.route('/test-maino', methods=['GET'])
 def test_maino():
     """Teste a conexão com a API do Mainô."""
@@ -16,7 +15,7 @@ def test_maino():
             return jsonify({'success': False, 'error': 'Variável de ambiente MAINO_API_KEY não configurada'}), 500
 
         maino_api = MainoAPI(api_key=api_key)
-        response = maino_api.test_connection() # Assumindo que a classe MainoAPI tem um método de teste
+        response = maino_api.test_connection() 
         
         if response and response.get('status') == 'ok':
             return jsonify({'success': True, 'message': 'Conexão estabelecida com sucesso!'}), 200
@@ -31,22 +30,15 @@ def sync_maino():
     try:
         data = request.get_json()
         
-        # Validar dados obrigatórios
         if not data or 'data_inicio' not in data or 'data_fim' not in data:
             return jsonify({'error': 'data_inicio e data_fim são obrigatórios'}), 400
         
-        # Corrigido: Pegando a chave da variável de ambiente, não do frontend
         api_key = os.getenv('MAINO_API_KEY')
         if not api_key:
             return jsonify({'error': 'Variável de ambiente MAINO_API_KEY não configurada'}), 500
         
-        # Inicializar API do Mainô
         maino_api = MainoAPI(api_key=api_key)
         
-        # Corrigido: Usando o banco de dados Postgres do main.py
-        # O caminho do banco de dados agora será gerenciado pelo SQLAlchemy
-        
-        # Baixar e processar XMLs
         resultado = maino_api.baixar_e_processar_xmls(
             data['data_inicio'],
             data['data_fim']
@@ -70,19 +62,15 @@ def list_nfes_maino():
     try:
         data = request.get_json()
         
-        # Validar dados obrigatórios
         if not data or 'data_inicio' not in data or 'data_fim' not in data:
             return jsonify({'error': 'data_inicio e data_fim são obrigatórios'}), 400
         
-        # Corrigido: Pegando a chave da variável de ambiente
         api_key = os.getenv('MAINO_API_KEY')
         if not api_key:
             return jsonify({'error': 'Variável de ambiente MAINO_API_KEY não configurada'}), 500
         
-        # Inicializar API do Mainô
         maino_api = MainoAPI(api_key=api_key)
         
-        # Listar notas fiscais
         notas = maino_api.listar_notas_fiscais_emitidas(
             data['data_inicio'],
             data['data_fim'],
