@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 import os
 from maino_integration import MainoAPI
-from models.opme import NotaFiscal, ItemNotaFiscal, db # Importação corrigida
+# CORREÇÃO: A importação agora aponta para 'models.user'
+from models.user import NotaFiscal, ItemNotaFiscal, db 
 
 maino_bp = Blueprint('maino', __name__)
 
