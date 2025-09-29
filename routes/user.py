@@ -1,75 +1,61 @@
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import DateTime
+from flask import Blueprint, jsonify, request
+# Importa os modelos do lugar certo
+from models.user import User, db
 
-db = SQLAlchemy()
+# Esta é a variável que estava faltando
+user_bp = Blueprint('user', __name__)
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+@user_bp.route('/users', methods=['GET'])
+def get_users():
+    try:
+        users = User.query.all()
+        return jsonify([user.to_dict() for user in users])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-    def __repr__(self):
-        return f'<User {self.username}>'
+@user_bp.route('/users', methods=['POST'])
+def create_user():
+    try:
+        data = request.json
+        if not data or not data.get('username') or not data.get('email'):
+            return jsonify({'error': 'username e email são obrigatórios'}), 400
+        
+        user = User(username=data['username'], email=data['email'])
+        db.session.add(user)
+        db.session.commit()
+        return jsonify(user.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'username': self.username,
-            'email': self.email
-        }
+@user_bp.route('/users/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    try:
+        user = User.query.get_or_404(user_id)
+        return jsonify(user.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-# --- MODELOS PADRONIZADOS E COMPLETOS ---
+@user_bp.route('/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    try:
+        user = User.query.get_or_404(user_id)
+        data = request.json
+        user.username = data.get('username', user.username)
+        user.email = data.get('email', user.email)
+        db.session.commit()
+        return jsonify(user.to_dict())
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
-# CLASSE RENOMEADA DE NFe PARA NotaFiscal E COM MAIS DETALHES
-class NotaFiscal(db.Model):
-    __tablename__ = 'nota_fiscal'
-    id = db.Column(db.Integer, primary_key=True)
-    chave_acesso = db.Column(db.String(44), unique=True, nullable=False)
-    numero = db.Column(db.String(9), nullable=False)
-    serie = db.Column(db.String(3))
-    data_emissao = db.Column(DateTime, nullable=False)
-    destinatario_nome = db.Column(db.String)
-    destinatario_cnpj = db.Column(db.String)
-    cfop = db.Column(db.String)
-    tipo_operacao = db.Column(db.String)
-    
-    # Relação com os itens
-    itens = db.relationship('ItemNotaFiscal', backref='nota_fiscal', lazy=True, cascade="all, delete-orphan")
-
-# NOVA CLASSE ADICIONADA
-class ItemNotaFiscal(db.Model):
-    __tablename__ = 'item_nota_fiscal'
-    id = db.Column(db.Integer, primary_key=True)
-    codigo_produto = db.Column(db.String, nullable=False)
-    descricao_produto = db.Column(db.String, nullable=False)
-    quantidade = db.Column(db.Float, nullable=False)
-    valor_total = db.Column(db.Float, nullable=False)
-    
-    # Chave estrangeira para ligar o item à sua nota fiscal
-    nota_fiscal_id = db.Column(db.Integer, db.ForeignKey('nota_fiscal.id'), nullable=False)
-
-class Produto(db.Model):
-    __tablename__ = 'produto'
-    id = db.Column(db.Integer, primary_key=True)
-    cProd = db.Column(db.String, unique=True, nullable=False)
-    xProd = db.Column(db.String, nullable=False)
-
-class Cliente(db.Model):
-    __tablename__ = 'cliente'
-    id = db.Column(db.Integer, primary_key=True)
-    cnpj_dest = db.Column(db.String, unique=True, nullable=False)
-    xNome_dest = db.Column(db.String, nullable=False)
-
-class Movimento(db.Model):
-    __tablename__ = 'movimento'
-    id = db.Column(db.Integer, primary_key=True)
-    nNF = db.Column(db.String, nullable=False)
-    dEmi = db.Column(DateTime)
-    cnpj_dest = db.Column(db.String, nullable=False)
-    xNome_dest = db.Column(db.String)
-    cProd = db.Column(db.String, nullable=False)
-    xProd = db.Column(db.String)
-    cfop = db.Column(db.String)
-    qCom = db.Column(db.Float, nullable=False)
-    nLote = db.Column(db.String)
-    qLote = db.Column(db.Float)
+@user_bp.route('/users/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    try:
+        user = User.query.get_or_404(user_id)
+        db.session.delete(user)
+        db.session.commit()
+        return '', 204
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
